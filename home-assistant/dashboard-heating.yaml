@@ -1,0 +1,84 @@
+# Heating dashboard (storage-mode dashboard export).
+# Three cards in a masonry view: they sit side by side when the screen is wide enough, stacked on a phone.
+# Install: Settings > Dashboards > Add dashboard (URL path must contain a hyphen, e.g. dashboard-heating),
+# open it, three-dot menu > Edit > Raw configuration editor, paste everything below this comment.
+title: Heating
+views:
+- title: Heating
+  path: heating
+  icon: mdi:radiator
+  cards:
+  - type: entities
+    title: Boiler
+    show_header_toggle: false
+    state_color: true
+    entities:
+    - entity: number.boiler_heating_setpoint
+      name: Radiator temp (now)
+    - entity: switch.boiler_heating
+      name: Heating
+    - entity: switch.boiler_hot_water
+      name: Hot water
+    - entity: sensor.heating_ebusd_boiler_boiler_status
+      name: Status
+      icon: mdi:fire
+    - entity: sensor.heating_ebusd_boiler_flow_temp
+      name: Flow temp
+      icon: mdi:thermometer-chevron-up
+    - entity: sensor.heating_ebusd_boiler_ewt_temp
+      name: Return temp
+      icon: mdi:thermometer-chevron-down
+    - entity: sensor.heating_ebusd_boiler_flame_power_kw
+      name: Burner power
+      icon: mdi:gas-burner
+  - type: entities
+    title: Schedule
+    show_header_toggle: false
+    state_color: true
+    entities:
+    - entity: input_boolean.boiler_schedule_enabled
+      name: Schedule on
+    - type: section
+      label: Away
+    - entity: input_boolean.boiler_away_mode
+      name: Away mode (overrides schedule)
+    - entity: input_number.boiler_temp_away
+      name: Away radiator temp
+    - type: section
+      label: Morning boost
+    - entity: input_datetime.boiler_time_morning
+      name: Starts at
+      icon: mdi:weather-sunset-up
+    - entity: input_number.boiler_temp_morning
+      name: Radiator temp
+    - type: section
+      label: Daytime
+    - entity: input_datetime.boiler_time_day
+      name: Starts at
+      icon: mdi:white-balance-sunny
+    - entity: input_number.boiler_temp_day
+      name: Radiator temp
+    - type: section
+      label: Evening comfort
+    - entity: input_datetime.boiler_time_evening
+      name: Starts at
+      icon: mdi:sofa
+    - entity: input_number.boiler_temp_evening
+      name: Radiator temp
+    - type: section
+      label: Sleep
+    - entity: input_datetime.boiler_time_sleep
+      name: Starts at
+      icon: mdi:weather-night
+    - entity: input_number.boiler_temp_sleep
+      name: Radiator temp
+  - type: history-graph
+    title: Last 24 h
+    hours_to_show: 24
+    entities:
+    - entity: number.boiler_heating_setpoint
+      name: Setpoint
+    - entity: sensor.heating_ebusd_boiler_flow_temp
+      name: Flow
+    - entity: sensor.heating_ebusd_boiler_ewt_temp
+      name: Return

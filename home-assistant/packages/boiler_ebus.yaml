@@ -1,0 +1,193 @@
+# Ariston Clas HE System EVO - boiler controls via ebusd (eBUS Adapter Shield C5).
+#
+# Install: copy to /config/packages/boiler_ebus.yaml and enable packages in configuration.yaml:
+#   homeassistant:
+#     packages: !include_dir_named packages
+# Also install boiler_helpers.yaml (or create the helpers in the UI, see README).
+#
+# Writes go to the allow-list in ebusd/ariston.csv (set_* messages). Settings are stored on the
+# boiler's flash: write on user action or a few scheduled changes a day, never from fast loops.
+#
+# Slider range is 45-60 degC here (this house's preference); the boiler itself accepts 35-82.
+# To change it: min/max on the number below, the "45 <= target <= 60" guard in the schedule
+# automation, and min/max of the input_number.boiler_temp_* helpers.
+# Entity ids assume the ebusd device lives in the area "Heating" (sensor.heating_ebusd_boiler_*).
+
+mqtt:
+  number:
+    - name: "Heating setpoint"
+      unique_id: boiler_ebus_ch_setpoint
+      default_entity_id: number.boiler_heating_setpoint
+      icon: mdi:radiator
+      command_topic: ebusd/boiler/set_ch_setpoint/set
+      # 6571 read-back: refreshed 3 s after a write and when the panel setpoint changes (automations below)
+      state_topic: ebusd/boiler/z1_heat_setpoint
+      value_template: "{{ value_json.value.value }}"
+      min: 45
+      max: 60
+      step: 1
+      mode: slider
+      unit_of_measurement: "°C"
+      device_class: temperature
+      device:
+        identifiers: ebusd_boiler
+
+  switch:
+    - name: "Heating"
+      unique_id: boiler_ebus_heating_enabled
+      default_entity_id: switch.boiler_heating
+      icon: mdi:radiator
+      command_topic: ebusd/boiler/set_heating_enabled/set
+      payload_on: "on"
+      payload_off: "off"
+      state_topic: ebusd/boiler/heating_enabled
+      value_template: "{{ value_json.value.value }}"
+      state_on: "on"
+      state_off: "off"
+      device:
+        identifiers: ebusd_boiler
+
+    - name: "Hot water"
+      unique_id: boiler_ebus_dhw_enabled
+      default_entity_id: switch.boiler_hot_water
+      icon: mdi:water-boiler
+      command_topic: ebusd/boiler/set_dhw_enabled/set
+      payload_on: "on"
+      payload_off: "off"
+      state_topic: ebusd/boiler/dhw_enabled
+      value_template: "{{ value_json.value.value }}"
+      state_on: "on"
+      state_off: "off"
+      device:
+        identifiers: ebusd_boiler
+
+# Schedule helpers (input_boolean/input_number/input_datetime boiler_*) are UI helpers (Settings > Helpers).
+
+automation:
+  - id: boiler_ebus_read_back_after_write
+    alias: "Boiler: read back after eBUS write"
+    description: "After any set_* write, re-read the matching register so HA shows the confirmed boiler state."
+    mode: queued
+    trigger:
+      - platform: mqtt
+        topic: ebusd/boiler/+/set
+    condition:
+      - condition: template
+        value_template: "{{ trigger.topic.split('/')[2].startswith('set_') }}"
+    action:
+      - delay: "00:00:03"
+      - service: mqtt.publish
+        data:
+          topic: >-
+            {% set name = trigger.topic.split('/')[2][4:] %}
+            ebusd/boiler/{{ 'z1_heat_setpoint' if name == 'ch_setpoint' else name }}/get
+          payload: ""
+
+  - id: boiler_ebus_refresh_state
+    alias: "Boiler: refresh state"
+    description: "ebusd only reports heating/hot water/setpoint when asked, so after any HA or MQTT restart the controls sit at 'unknown' (switches then show lightning-bolt buttons). Re-read them on startup, when MQTT comes back, when a panel setting changes (settings counter) and every 5 min. Reads only, no writes."
+    mode: single
+    trigger:
+      - platform: homeassistant
+        event: start
+      - platform: mqtt
+        topic: homeassistant/status
+        payload: "online"
+      - platform: state
+        entity_id: sensor.heating_ebusd_boiler_config_version_counter
+      - platform: time_pattern
+        minutes: "/5"
+    action:
+      - delay: "00:00:20"
+      - repeat:
+          for_each:
+            - heating_enabled
+            - dhw_enabled
+            - z1_heat_setpoint
+          sequence:
+            - service: mqtt.publish
+              data:
+                topic: "ebusd/boiler/{{ repeat.item }}/get"
+                payload: ""
+            - delay: "00:00:02"
+
+  - id: boiler_ebus_read_setpoint_on_panel_change
+    alias: "Boiler: re-read setpoint when it changes on the boiler"
+    description: "The boiler broadcasts its computed setpoint (6197) every ~25 s; when it changes, re-read 6571 so the control follows front-panel changes."
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: sensor.heating_ebusd_boiler_ch_setpoint_temp
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.state not in ['unknown', 'unavailable'] }}"
+    action:
+      - service: mqtt.publish
+        data:
+          topic: ebusd/boiler/z1_heat_setpoint/get
+          payload: ""
+
+  - id: boiler_ebus_setpoint_schedule
+    alias: "Boiler: setpoint schedule"
+    description: "4 periods (morning, day, evening, sleep); times and temps from UI helpers input_datetime.boiler_time_* / input_number.boiler_temp_*. Away mode (input_boolean.boiler_away_mode) overrides with input_number.boiler_temp_away. Writes only when the target differs from the current setpoint."
+    # restart: a burst of helper edits collapses into one evaluation of the latest state
+    mode: restart
+    trigger:
+      - platform: time
+        at:
+          - input_datetime.boiler_time_morning
+          - input_datetime.boiler_time_day
+          - input_datetime.boiler_time_evening
+          - input_datetime.boiler_time_sleep
+      # catch up after HA restart, when re-enabled, or when a helper is edited
+      - platform: homeassistant
+        event: start
+      - platform: state
+        entity_id: input_boolean.boiler_schedule_enabled
+        to: "on"
+      - platform: state
+        entity_id: input_boolean.boiler_away_mode
+      - platform: state
+        entity_id:
+          - input_number.boiler_temp_morning
+          - input_number.boiler_temp_day
+          - input_number.boiler_temp_evening
+          - input_number.boiler_temp_sleep
+          - input_number.boiler_temp_away
+          - input_datetime.boiler_time_morning
+          - input_datetime.boiler_time_day
+          - input_datetime.boiler_time_evening
+          - input_datetime.boiler_time_sleep
+    action:
+      # debounce, then decide from the state at write time
+      - delay: "00:00:05"
+      - variables:
+          target: >-
+            {% set t = now().strftime('%H:%M:%S') %}
+            {% set tm = states('input_datetime.boiler_time_morning') %}
+            {% set td = states('input_datetime.boiler_time_day') %}
+            {% set te = states('input_datetime.boiler_time_evening') %}
+            {% set ts = states('input_datetime.boiler_time_sleep') %}
+            {% if is_state('input_boolean.boiler_away_mode', 'on') %}{{ states('input_number.boiler_temp_away') | float(0) }}
+            {% elif t >= ts or t < tm %}{{ states('input_number.boiler_temp_sleep') | float(0) }}
+            {% elif t < td %}{{ states('input_number.boiler_temp_morning') | float(0) }}
+            {% elif t < te %}{{ states('input_number.boiler_temp_day') | float(0) }}
+            {% else %}{{ states('input_number.boiler_temp_evening') | float(0) }}{% endif %}
+      # away mode applies even when the schedule is off
+      - condition: or
+        conditions:
+          - condition: state
+            entity_id: input_boolean.boiler_away_mode
+            state: "on"
+          - condition: state
+            entity_id: input_boolean.boiler_schedule_enabled
+            state: "on"
+      - condition: template
+        value_template: "{{ 45 <= target | float(0) <= 60 }}"
+      - condition: template
+        value_template: "{{ target | float(0) != states('number.boiler_heating_setpoint') | float(0) }}"
+      - service: number.set_value
+        target:
+          entity_id: number.boiler_heating_setpoint
+        data:
+          value: "{{ target | float }}"

@@ -1,0 +1,82 @@
+# Helper entities for the boiler schedule / away mode (YAML variant).
+#
+# Prefer editing them in the UI? Skip this file and create the same entities in
+# Settings > Devices & services > Helpers (names/ids/ranges listed in README.md).
+# YAML-defined helpers work the same but can't be edited in the UI (values are still
+# changeable from the dashboard). No `initial:` on purpose: values are restored across restarts.
+#
+# After first install set the times and temperatures on the Heating dashboard.
+# Until the temps are in range (45-60) the schedule automation does nothing.
+# Keep the periods in order: morning < day < evening < sleep.
+
+input_boolean:
+  boiler_schedule_enabled:
+    name: Schedule
+    icon: mdi:calendar-clock
+  boiler_away_mode:
+    name: Away mode
+    icon: mdi:airplane
+
+input_number:
+  boiler_temp_morning:
+    name: Morning temp
+    min: 45
+    max: 60
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+    icon: mdi:weather-sunset-up
+  boiler_temp_day:
+    name: Daytime temp
+    min: 45
+    max: 60
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+    icon: mdi:white-balance-sunny
+  boiler_temp_evening:
+    name: Evening temp
+    min: 45
+    max: 60
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+    icon: mdi:sofa
+  boiler_temp_sleep:
+    name: Sleep temp
+    min: 45
+    max: 60
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+    icon: mdi:weather-night
+  boiler_temp_away:
+    name: Away temp
+    min: 45
+    max: 60
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+    icon: mdi:airplane
+
+input_datetime:
+  boiler_time_morning:
+    name: Morning starts
+    has_date: false
+    has_time: true
+    icon: mdi:clock-outline
+  boiler_time_day:
+    name: Daytime starts
+    has_date: false
+    has_time: true
+    icon: mdi:clock-outline
+  boiler_time_evening:
+    name: Evening starts
+    has_date: false
+    has_time: true
+    icon: mdi:clock-outline
+  boiler_time_sleep:
+    name: Sleep starts
+    has_date: false
+    has_time: true
+    icon: mdi:clock-outline
