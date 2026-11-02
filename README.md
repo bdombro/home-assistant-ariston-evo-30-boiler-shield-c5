@@ -25,6 +25,22 @@ Other Ariston-group boilers (Chaffoteaux Mira / Talia / Serelia, Elco, Genus, Al
 so the method and much of the register map should carry over, but you must verify each register on your own boiler (see
 [Adapting to another boiler](#adapting-to-another-boiler)).
 
+## Is your setup like mine?
+
+The eBUS side works the same on any boiler of this model, but your **plumbing and wiring decide what the Heating and Hot
+water switches actually do**. Check these before relying on them (`just read <name>` gives the boiler's view):
+
+| Check | Mine | If yours differs |
+|---|---|---|
+| Boiler type | **System** boiler feeding a separate hot water cylinder | **Combi**: the boiler heats tap water itself, so the Hot water switch really turns hot water on/off |
+| How the cylinder is heated | Through the **heating circuit** (cylinder thermostat + 2-port zone valve). The boiler's own hot-water side is unused (`boiler_type` = `ext_tank_thermostat`, `diverter_cycles` = 0) | **Cylinder sensor wired to the boiler**: its hot-water side is used, the left +/- buttons work and the Hot water switch controls the cylinder |
+| What is on the `TA` input | **Bridged**: constant demand (`heat_request` always on). The setpoint and Heating switch are the only controls | **Timer or room thermostat on `TA`**: it decides *when* the boiler runs; Home Assistant only sets *how hot* and can turn heating off |
+| Outdoor sensor | None: fixed setpoint (error `236` is harmless) | **With a sensor** the boiler may follow its weather curve rather than the fixed setpoint the slider writes |
+
+The consequence in my house: **the Heating switch is also the hot-water switch**, and the cylinder only gets as hot as
+the radiator setpoint allows (a few degrees below it). The full write-up, a diagram and photos of the boiler and hot press:
+[docs/example-install.md](docs/example-install.md).
+
 ## What you get
 
 - **Live boiler data** (every few seconds): status (`standby` / `heating` / `circulating` / `heating hot water` /
@@ -58,10 +74,27 @@ Last 24 h [ setpoint / flow / return history graph ]
 
 ## How it works
 
+```mermaid
+flowchart LR
+  B["Boiler BUS terminals<br/>(Ariston BridgeNet)"] <-- "2 wires" --> C["Shield C5<br/>(enhanced protocol, port 9999)"]
+  C <-- "Wi-Fi" --> E["ebusd app<br/>(ariston.csv decodes / encodes)"]
+  E <-- "MQTT" --> H["Home Assistant<br/>(package: controls, schedule, dashboard)"]
 ```
-Boiler BUS terminals ──2 wires──> Shield C5 ──Wi-Fi──> ebusd app ──MQTT──> Home Assistant
-(Ariston BridgeNet)               (enhanced protocol,  (ariston.csv        (package: controls,
-                                   port 9999)           decodes/encodes)    schedule, dashboard)
+
+A write, e.g. moving the radiator slider to 55 °C:
+
+```mermaid
+sequenceDiagram
+  participant HA as Home Assistant
+  participant E as ebusd
+  participant B as Boiler (0x3c)
+  HA->>E: MQTT ebusd/boiler/set_ch_setpoint/set 55
+  E->>B: 2020 6571 2602 (550 = 55.0 °C, little-endian)
+  B-->>E: ACK, re-broadcasts new value
+  HA->>E: read-back z1_heat_setpoint/get
+  E->>B: 2000 6571
+  B-->>E: 55.0
+  E-->>HA: slider shows 55 °C
 ```
 
 - The boiler broadcasts values on the bus (setpoint, status, heat request) and answers reads sent to its address `0x3c`.
@@ -230,7 +263,9 @@ The approach worked in seven steps; the details and the lessons are in
 - Verified on **one** boiler; register meanings on yours may differ.
 - No room or outdoor temperature (none on this bus), so no automatic weather or room compensation.
 - Hot water: on this boiler there is no cylinder sensor, the left +/- buttons do nothing and DHW hours stay 0, so the
-  hot-water switch only toggles a mode flag. Hot water here is heated externally.
+  hot-water switch only toggles a mode flag. Here the cylinder is heated off the **heating** circuit (it looks like
+  ordinary heat demand to the boiler), so the heating switch and flow setpoint also decide how hot the cylinder gets (see
+  [docs/example-install.md](docs/example-install.md)).
 - `1919` ("zone 1 heat activation", what an eBUS thermostat sends) reads and writes fine and doesn't bump the settings
   counter, but its effect on heating is **unverified** (needs the `TA` input unlinked). Its write line is commented out.
 - Several broadcast values (`d746`, `da46`, `dc46`, `de46`) are still unidentified.
@@ -262,6 +297,7 @@ ebusd/ariston.csv, _templates.csv        boiler-only ebusd config (GPL-3.0, deri
 home-assistant/packages/boiler_ebus.yaml controls, read-back / refresh / schedule automations
 home-assistant/packages/boiler_helpers.yaml  schedule/away helper entities (YAML variant)
 home-assistant/dashboard-heating.yaml    the Heating dashboard
+docs/example-install.md                  the house this runs in: plumbing, hot water, photos (docs/images/)
 docs/register-map.md                     verified registers, message types, front-panel notes
 docs/how-it-was-figured-out.md           method, lessons learned, references
 AGENTS.md                                terse rules and pitfalls for AI agents / contributors

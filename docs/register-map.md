@@ -36,8 +36,9 @@ written the way they appear on the wire and in `ebusd/ariston.csv`, so `6197` is
 "fixed" (no outdoor sensor). `6197` (below) is the *computed* setpoint the boiler then broadcasts.
 
 > **Hot water note.** On this boiler the left +/- buttons (DHW setpoint) do nothing and DHW burner hours stay 0 - no
-> cylinder sensor is connected, so the tap icon only toggles a mode flag. Hot water in this house is heated through
-> the heating circuit by something external. If your boiler has a cylinder sensor your result will differ.
+> cylinder sensor is connected, so the tap icon only toggles a mode flag. The cylinder (upstairs, with a backup
+> immersion) is heated off the heating flow, so to the boiler it is just heat demand. If your boiler has a cylinder
+> sensor your result will differ.
 
 ## Read-only
 
@@ -62,6 +63,8 @@ written the way they appear on the wire and in `ebusd/ariston.csv`, so `6197` is
 | `6297`..`6797` | `raw_9762`..`raw_9767` (not shipped) | 40.0 °C | Z2-Z7 computed setpoints per other boilers' research - unused zones |
 | `d746` `da46` `dc46` `de46` | (not shipped) | 0, 150, 75, 75 | Unknown. Same values reported on other boilers |
 | `4cd1` `42d2` | DHW burner hours, pump hours | 0, 0 | Likely unused on this boiler |
+| `c428` | `boiler_type` | ext_tank_thermostat | Held by boiler. Hot-water configuration: 0 mixed_instant, 1 ext_tank_ntc, 2 ext_tank_thermostat, 3 micro_storage, 4 stratification_storage, 6 storage |
+| `40d2` `c012` | `diverter_cycles`, `diverter_valve` | 0, dhw | Held by boiler. 0 cycles after 2332 ignitions = the boiler's own hot-water path has never been used (see hot-water note above) |
 
 ## Errors
 
