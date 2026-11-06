@@ -191,3 +191,20 @@ automation:
           entity_id: number.boiler_heating_setpoint
         data:
           value: "{{ target | float }}"
+
+  - id: boiler_ebus_fault_alert
+    alias: "Boiler: fault alert"
+    description: "Read-only. Notify the phone when the boiler sits in no_flame (ignition lockout) or low_water_pressure for 2 minutes."
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: sensor.heating_ebusd_boiler_boiler_status
+        to:
+          - no_flame
+          - low_water_pressure
+        for: "00:02:00"
+    action:
+      - service: notify.mobile_app_brians_iphone_15_pro
+        data:
+          title: "Boiler fault"
+          message: "Boiler status is {{ trigger.to_state.state | replace('_', ' ') }}. Check the display; one reset is OK, call a technician if it repeats."
